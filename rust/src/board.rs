@@ -2,6 +2,8 @@ use std::fmt;
 use std::fs;
 use std::rc::Rc;
 
+use thincollections::thin_vec::ThinVec;
+
 const SIXTEEN_POWER_1: u64 = 16;
 const SIXTEEN_POWER_2: u64 = 256;
 const SIXTEEN_POWER_3: u64 = 4096;
@@ -9,8 +11,8 @@ const SIXTEEN_POWER_4: u64 = 65536;
 const SIXTEEN_POWER_5: u64 = 1048576;
 const SIXTEEN_POWER_6: u64 = 16777216;
 const SIXTEEN_POWER_7: u64 = 268435456;
-const SIXTEEN_POWER_8: u64 = 4294967296;
-const SIXTEEN_POWER_9: u64 = 68719476736;
+// const SIXTEEN_POWER_8: u64 = 4294967296;
+// const SIXTEEN_POWER_9: u64 = 68719476736;
 
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]
 pub struct Position {
@@ -40,7 +42,6 @@ pub enum Colour {
     BLUE,
     GREEN,
     YELLOW,
-    BLACK,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -50,6 +51,10 @@ pub struct Tile {
     down: bool,
     left: bool,
     right: bool,
+    up_move: Position,
+    down_move: Position,
+    left_move: Position,
+    right_move: Position,
 }
 
 impl Tile {
@@ -74,11 +79,10 @@ impl Tile {
 #[derive(Debug, Clone)]
 pub struct Board {
     map: Rc<[[Tile; 16]; 16]>,
-    red: Position,
-    green: Position,
-    blue: Position,
-    yellow: Position,
-    black: Position,
+    pub red: Position,
+    pub green: Position,
+    pub blue: Position,
+    pub yellow: Position,
     goal: Position,
 }
 
@@ -90,7 +94,6 @@ impl Board {
         green: Position,
         blue: Position,
         yellow: Position,
-        black: Position,
         goal: Position,
     ) -> Board {
         let map = Rc::new(load_map());
@@ -99,7 +102,6 @@ impl Board {
             green: green,
             blue: blue,
             yellow: yellow,
-            black: black,
             goal: goal,
             map: map,
         };
@@ -110,11 +112,11 @@ impl Board {
         return self.goal
     }
 
-    pub fn get_valid_directions(&self, colour: Colour) -> Vec<Direction> {
+    pub fn get_valid_directions(&self, colour: Colour) -> ThinVec<Direction> {
         let robot_position = self.get_robot_by_colour(colour);
         let tile = self.get_tile(robot_position);
 
-        let mut directions = Vec::new();
+        let mut directions = ThinVec::new();
         if tile.up && !self.is_occupied(tile.get_adjacent_position(Direction::UP)) {
             directions.push(Direction::UP);
         }
@@ -136,17 +138,120 @@ impl Board {
             Colour::BLUE => self.blue,
             Colour::GREEN => self.green,
             Colour::YELLOW => self.yellow,
-            Colour::BLACK => self.black,
         }
     }
 
-    pub fn move_robot(&mut self, colour: Colour, direction: Direction) {
-        let mut robot_position = self.get_robot_by_colour(colour);
-        while self.can_move(robot_position, direction) {
-            let tile = self.get_tile(robot_position);
-            robot_position = tile.get_adjacent_position(direction); 
-        }
-        self.set_robot_by_colour(colour, robot_position);
+    pub fn move_robot(&mut self, colour: Colour, direction: Direction) -> Position {
+        let tile = self.get_tile(self.get_robot_by_colour(colour));
+        let end_position = match direction {
+            Direction::UP => {
+                let mut end_position = tile.up_move.clone();
+                let mut collision_y = end_position.y;
+                if self.red.x == end_position.x && self.red.y < tile.position.y && self.red.y >= end_position.y {
+                    if collision_y < self.red.y + 1 {
+                        collision_y = self.red.y + 1;
+                    }
+                }
+                if self.green.x == end_position.x && self.green.y < tile.position.y && self.green.y >= end_position.y {
+                    if collision_y < self.green.y + 1 {
+                        collision_y = self.green.y + 1;
+                    }
+                }
+                if self.blue.x == end_position.x && self.blue.y < tile.position.y && self.blue.y >= end_position.y {
+                    if collision_y < self.blue.y + 1 {
+                        collision_y = self.blue.y + 1;
+                    }
+                }
+                if self.yellow.x == end_position.x && self.yellow.y < tile.position.y && self.yellow.y >= end_position.y {
+                    if collision_y < self.yellow.y + 1 {
+                        collision_y = self.yellow.y + 1;
+                    }
+                }
+                end_position.y = collision_y;
+                end_position
+            },
+            Direction::DOWN => {
+                let mut end_position = tile.down_move.clone();
+                let mut collision_y = end_position.y;
+                if self.red.x == end_position.x && self.red.y > tile.position.y && self.red.y <= end_position.y {
+                    if collision_y > self.red.y - 1 {
+                        collision_y = self.red.y - 1;
+                    }
+                }
+                if self.green.x == end_position.x && self.green.y > tile.position.y && self.green.y <= end_position.y {
+                    if collision_y > self.green.y - 1 {
+                        collision_y = self.green.y - 1;
+                    }
+                }
+                if self.blue.x == end_position.x && self.blue.y > tile.position.y && self.blue.y <= end_position.y {
+                    if collision_y > self.blue.y - 1 {
+                        collision_y = self.blue.y - 1;
+                    }
+                }
+                if self.yellow.x == end_position.x && self.yellow.y > tile.position.y && self.yellow.y <= end_position.y {
+                    if collision_y > self.yellow.y - 1 {
+                        collision_y = self.yellow.y - 1;
+                    }
+                }
+                end_position.y = collision_y;
+                end_position
+            },
+            Direction::LEFT => {
+                let mut end_position = tile.left_move.clone();
+                let mut collision_x = end_position.x;
+                if self.red.y == end_position.y && self.red.x < tile.position.x && self.red.x >= end_position.x {
+                    if collision_x < self.red.x + 1 {
+                        collision_x = self.red.x + 1;
+                    }
+                }
+                if self.green.y == end_position.y && self.green.x < tile.position.x && self.green.x >= end_position.x {
+                    if collision_x < self.green.x + 1 {
+                        collision_x = self.green.x + 1;
+                    }
+                }
+                if self.blue.y == end_position.y && self.blue.x < tile.position.x && self.blue.x >= end_position.x {
+                    if collision_x < self.blue.x + 1 {
+                        collision_x = self.blue.x + 1;
+                    }
+                }
+                if self.yellow.y == end_position.y && self.yellow.x < tile.position.x && self.yellow.x >= end_position.x {
+                    if collision_x < self.yellow.x + 1 {
+                        collision_x = self.yellow.x + 1;
+                    }
+                }
+                end_position.x = collision_x;
+                end_position
+            },
+            Direction::RIGHT => {
+                let mut end_position = tile.right_move.clone();
+                let mut collision_x = end_position.x;
+                if self.red.y == end_position.y && self.red.x > tile.position.x && self.red.x <= end_position.x {
+                    if collision_x > self.red.x - 1 {
+                        collision_x = self.red.x - 1;
+                    }
+                }
+                if self.green.y == end_position.y && self.green.x > tile.position.x && self.green.x <= end_position.x {
+                    if collision_x > self.green.x - 1 {
+                        collision_x = self.green.x - 1;
+                    }
+                }
+                if self.blue.y == end_position.y && self.blue.x > tile.position.x && self.blue.x <= end_position.x {
+                    if collision_x > self.blue.x - 1 {
+                        collision_x = self.blue.x - 1;
+                    }
+                }
+                if self.yellow.y == end_position.y && self.yellow.x > tile.position.x && self.yellow.x <= end_position.x {
+                    if collision_x > self.yellow.x - 1 {
+                        collision_x = self.yellow.x - 1;
+                    }
+                }
+                end_position.x = collision_x;
+                end_position
+            },
+        };
+        self.set_robot_by_colour(colour, end_position);
+
+        return end_position;
     }
 
     pub fn is_solved(&self, colour: Colour) -> bool {
@@ -155,7 +260,6 @@ impl Board {
             Colour::BLUE => self.blue == self.goal,
             Colour::YELLOW => self.yellow == self.goal,
             Colour::GREEN => self.green == self.goal,
-            Colour::BLACK => self.black == self.goal,
         }
     }
 
@@ -167,10 +271,64 @@ impl Board {
             SIXTEEN_POWER_4 * self.blue.x as u64 +
             SIXTEEN_POWER_5 * self.blue.y as u64 +
             SIXTEEN_POWER_6 * self.yellow.x as u64 +
-            SIXTEEN_POWER_7 * self.yellow.y as u64 +
-            SIXTEEN_POWER_8 * self.black.x as u64 +
-            SIXTEEN_POWER_9 * self.black.y as u64
+            SIXTEEN_POWER_7 * self.yellow.y as u64
 
+    }
+
+    pub fn permuted_hashes(&self) -> [u64; 6] {
+        return [self.red.x as u64 +
+            (SIXTEEN_POWER_1 * self.red.y as u64) +
+            (SIXTEEN_POWER_2 * self.green.x as u64) +
+            (SIXTEEN_POWER_3 * self.green.y as u64) +
+            (SIXTEEN_POWER_4 * self.blue.x as u64) +
+            (SIXTEEN_POWER_5 * self.blue.y as u64) +
+            (SIXTEEN_POWER_6 * self.yellow.x as u64) +
+            (SIXTEEN_POWER_7 * self.yellow.y as u64),
+            self.red.x as u64 +
+            (SIXTEEN_POWER_1 * self.red.y as u64) +
+            (SIXTEEN_POWER_2 * self.green.x as u64) +
+            (SIXTEEN_POWER_3 * self.green.y as u64) +
+            (SIXTEEN_POWER_4 * self.yellow.x as u64) +
+            (SIXTEEN_POWER_5 * self.yellow.y as u64) +
+            (SIXTEEN_POWER_6 * self.blue.x as u64) +
+            (SIXTEEN_POWER_7 * self.blue.y as u64),
+            self.red.x as u64 +
+            (SIXTEEN_POWER_1 * self.red.y as u64) +
+            (SIXTEEN_POWER_2 * self.blue.x as u64) +
+            (SIXTEEN_POWER_3 * self.blue.y as u64) +
+            (SIXTEEN_POWER_4 * self.green.x as u64) +
+            (SIXTEEN_POWER_5 * self.green.y as u64) +
+            (SIXTEEN_POWER_6 * self.yellow.x as u64) +
+            (SIXTEEN_POWER_7 * self.yellow.y as u64),
+            self.red.x as u64 +
+            (SIXTEEN_POWER_1 * self.red.y as u64) +
+            (SIXTEEN_POWER_2 * self.blue.x as u64) +
+            (SIXTEEN_POWER_3 * self.blue.y as u64) +
+            (SIXTEEN_POWER_4 * self.yellow.x as u64) +
+            (SIXTEEN_POWER_5 * self.yellow.y as u64) +
+            (SIXTEEN_POWER_6 * self.green.x as u64) +
+            (SIXTEEN_POWER_7 * self.green.y as u64),
+            self.red.x as u64 +
+            (SIXTEEN_POWER_1 * self.red.y as u64) +
+            (SIXTEEN_POWER_2 * self.yellow.x as u64) +
+            (SIXTEEN_POWER_3 * self.yellow.y as u64) +
+            (SIXTEEN_POWER_4 * self.blue.x as u64) +
+            (SIXTEEN_POWER_5 * self.blue.y as u64) +
+            (SIXTEEN_POWER_6 * self.green.x as u64) +
+            (SIXTEEN_POWER_7 * self.green.y as u64),
+            self.red.x as u64 +
+            (SIXTEEN_POWER_1 * self.red.y as u64) +
+            (SIXTEEN_POWER_2 * self.yellow.x as u64) +
+            (SIXTEEN_POWER_3 * self.yellow.y as u64) +
+            (SIXTEEN_POWER_4 * self.green.x as u64) +
+            (SIXTEEN_POWER_5 * self.green.y as u64) +
+            (SIXTEEN_POWER_6 * self.blue.x as u64) +
+            (SIXTEEN_POWER_7 * self.blue.y as u64),
+        ];
+    }
+
+    pub fn get_robots(&self) -> Vec<Position> {
+        return vec![self.red, self.green, self.blue, self.yellow];
     }
 
     // private
@@ -184,27 +342,11 @@ impl Board {
             Colour::BLUE => self.blue = position,
             Colour::GREEN => self.green = position,
             Colour::YELLOW => self.yellow = position,
-            Colour::BLACK => self.black = position,
         }
     }
 
     fn is_occupied(&self, position: Position) -> bool {
-        if self.red == position {
-            return true
-        }
-        if self.blue == position {
-            return true
-        }
-        if self.yellow == position {
-            return true
-        }
-        if self.green == position {
-            return true
-        }
-        if self.black == position {
-            return true
-        }
-        return false
+        return self.red == position || self.blue == position || self.yellow == position || self.green == position
     }
 
     fn can_move(&self, position: Position, direction: Direction) -> bool {
@@ -273,6 +415,24 @@ impl EmptyBoard {
     }
 }
 
+fn compute_end_position(tile: Tile, direction: Direction, map: [[Tile; 16]; 16]) -> Position {
+    let mut moving_tile = tile;
+    while can_move(moving_tile, direction) {
+        let next_position = moving_tile.get_adjacent_position(direction);
+        moving_tile = map[next_position.x as usize][next_position.y as usize];
+    }
+    return moving_tile.position
+}
+
+fn can_move(tile: Tile, direction: Direction) -> bool {
+    return !match direction {
+        Direction::UP => !tile.up,
+        Direction::DOWN => !tile.down,
+        Direction::LEFT => !tile.left,
+        Direction::RIGHT => !tile.right,
+    };
+}
+
 fn load_map() -> [[Tile; 16]; 16] {
     let mut map = init_map_array();
     let contents = fs::read_to_string("maps/map1.txt").expect("Error reading map");
@@ -297,265 +457,273 @@ fn load_map() -> [[Tile; 16]; 16] {
         }
         j += 1;
     }
+    for j in 0..16 {
+        for i in 0..16 {
+            map[i][j].up_move = compute_end_position(map[i][j], Direction::UP, map);
+            map[i][j].down_move = compute_end_position(map[i][j], Direction::DOWN, map);
+            map[i][j].left_move = compute_end_position(map[i][j], Direction::LEFT, map);
+            map[i][j].right_move = compute_end_position(map[i][j], Direction::RIGHT, map);
+        }
+    }
     return map;
 }
 
 fn init_map_array() -> [[Tile; 16]; 16] {
-    [[Tile {position: Position{x: 0, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 0, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 1, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 1, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 2, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 2, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 3, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 3, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 4, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 4, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 5, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 5, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 6, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 6, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 7, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 7, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 8, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 8, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 9, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 9, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 10, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 10, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 11, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 11, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 12, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 12, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 13, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 13, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 14, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 14, y: 15}, up: false, down: false, left: false, right: false},],
-    [Tile {position: Position{x: 15, y: 0}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 1}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 2}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 3}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 4}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 5}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 6}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 7}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 8}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 9}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 10}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 11}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 12}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 13}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 14}, up: false, down: false, left: false, right: false},
-    Tile {position: Position{x: 15, y: 15}, up: false, down: false, left: false, right: false},],
+    [[Tile {position: Position{x: 0, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 0, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 1, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 1, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 2, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 2, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 3, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 3, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 4, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 4, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 5, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 5, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 6, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 6, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 7, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 7, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 8, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 8, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 9, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 9, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 10, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 10, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 11, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 11, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 12, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 12, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 13, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 13, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 14, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 14, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
+    [Tile {position: Position{x: 15, y: 0}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 1}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 2}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 3}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 4}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 5}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 6}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 7}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 8}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 9}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 10}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 11}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 12}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 13}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 14}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},
+    Tile {position: Position{x: 15, y: 15}, up: false, down: false, left: false, right: false, up_move: Position{x: 0, y: 0}, down_move: Position{x: 0, y: 0}, left_move: Position{x: 0, y: 0}, right_move: Position{x: 0, y: 0}},],
     ]
 }

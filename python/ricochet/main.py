@@ -88,7 +88,7 @@ def get_neighbours(option, track_path, flooded_map):
         for direction in option.board.get_valid_directions(robot.tile):
             new_board = option.board.clone()
             new_board.move_robot(direction, robot.colour)
-            new_position = new_board.get_robot_by_colour(robot.colour).position
+            new_position = new_board.get_robot_by_colour(board.goal).position
             minimum_distance = _calculate_minimum_distance(board, new_position, flooded_map)
 
             path = []
